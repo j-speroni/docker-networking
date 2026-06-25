@@ -1,0 +1,23 @@
+services:
+  manager1:
+    image: docker:dind
+    privileged: true
+    hostname: manager1
+    ports:
+      - "2375:2375"
+      - "80:80"
+
+  worker1:
+    image: docker:dind
+    privileged: true
+    hostname: worker1
+
+  worker2:
+    image: docker:dind
+    privileged: true
+    hostname: worker2
+
+  worker3:
+    image: docker:dind
+    privileged: true
+    hostname: worker3

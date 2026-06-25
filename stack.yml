@@ -1,0 +1,92 @@
+services:
+
+  nginx:
+    image: dn-nginx:v1
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+    ports:
+      - "80:80"
+    networks:
+      - worker_net
+
+  csv-db:
+    image: dn-csv-db:v1
+    networks:
+      - database_net
+
+  node1:
+    image: dn-node:v1
+    environment:
+      NODE_ID: node1
+      PEERS: "node2a:5000, node2b:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+      - database_net
+
+  node2a:
+    image: dn-node:v1
+    environment:
+      NODE_ID: node2a
+      PEERS: "node3a:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node3a:
+    image: dn-node:v1
+    environment:
+      NODE_ID: node3a
+      PEERS: "node4:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node2b:
+    image: dn-node:v1
+    environment:
+      NODE_ID: node2b
+      PEERS: "node3b:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node3b:
+    image: dn-node:v1
+    environment:
+      NODE_ID: node3b
+      PEERS: "node4:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node4:
+    image: dn-node:v1
+    environment:
+      NODE_ID: node4
+      PEERS: ""
+      ROLE: collector
+      COLLECT_WINDOW: "3"
+    networks:
+      - worker_net
+
+  visualizer:
+    image: dn-visualizer:v1
+    environment:
+      # Nodes the visualizer should scrape (host:port)
+      NODES: "node1:5000,node2a:5000,node2b:5000,node3a:5000,node3b:5000,node4:5000"
+      POLL_INTERVAL: "0.5"
+      HOSTNAME: "{{.Task.Name}}"
+    deploy:
+      replicas: 1
+    networks:
+      - worker_net
+
+networks:
+  worker_net:
+    driver: overlay
+  database_net:
+    driver: overlay
+

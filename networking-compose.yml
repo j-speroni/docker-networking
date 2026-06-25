@@ -1,0 +1,108 @@
+name: dn
+
+services:
+
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - visualizer
+    networks:
+      - worker_net
+
+  csv-db:
+    build: ./csv-db
+    container_name: csv-db
+    networks:
+      - database_net
+
+  node1:
+    build: ./node
+    container_name: node1
+    environment:
+      NODE_ID: node1
+      PEERS: "node2a:5000, node2b:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+      - database_net
+
+  node2a:
+    build: ./node
+    container_name: node2a
+    environment:
+      NODE_ID: node2a
+      PEERS: "node3a:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node3a:
+    build: ./node
+    container_name: node3a
+    environment:
+      NODE_ID: node3a
+      PEERS: "node4:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node2b:
+    build: ./node
+    container_name: node2b
+    environment:
+      NODE_ID: node2b
+      PEERS: "node3b:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node3b:
+    build: ./node
+    container_name: node3b
+    environment:
+      NODE_ID: node3b
+      PEERS: "node4:5000"
+      PROCESS_DELAY: "1"
+    networks:
+      - worker_net
+
+  node4:
+    build: ./node
+    container_name: node4
+    environment:
+      NODE_ID: node4
+      PEERS: ""
+      ROLE: collector
+      COLLECT_WINDOW: "3"
+    networks:
+      - worker_net
+
+  visualizer:
+    build: ./visualizer
+    container_name: visualizer
+    environment:
+      # Nodes the visualizer should scrape (host:port)
+      NODES: "node1:5000,node2a:5000,node2b:5000,node3a:5000,node3b:5000,node4:5000"
+      POLL_INTERVAL: "0.5"
+      HOSTNAME: "visualizer"
+    depends_on:
+      - node1
+      - node2a
+      - node3a
+      - node2b
+      - node3b
+      - node4
+    networks:
+      - worker_net
+
+networks:
+  worker_net:
+    driver: bridge
+  database_net:
+    driver: bridge
+

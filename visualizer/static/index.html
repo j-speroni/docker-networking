@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Message Transformation Visualizer</title>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; }
+    header {
+      padding: 12px 20px; border-bottom: 1px solid #262a33;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    header h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 600; }
+    input, select, button {
+      background: #1c1f26; color: #e6e6e6; border: 1px solid #30363d;
+      border-radius: 6px; padding: 7px 10px; font-size: 13px;
+    }
+    input { width: 240px; }
+    button { cursor: pointer; }
+    button.primary { background: #238636; border-color: #2ea043; }
+    button:hover { filter: brightness(1.15); }
+    .meta { font-size: 12px; color: #8a909c; margin-left: auto; }
+    #main { display: flex; height: calc(100vh - 53px); }
+    #graph { flex: 1; }
+    #panel {
+      width: 340px; border-left: 1px solid #262a33; padding: 16px;
+      overflow-y: auto; font-size: 13px; box-sizing: border-box;
+    }
+    #panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #8a909c; margin: 0 0 8px; }
+    .branch { border: 1px solid #30363d; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+    .branch.win { border-color: #2ea043; background: #12331c; }
+    .branch .tag { font-size: 11px; color: #8a909c; }
+    .step { font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.5; }
+    .step .n { color: #58a6ff; }
+    .step .arrow { color: #6e7681; }
+    code { background: #1c1f26; padding: 1px 5px; border-radius: 4px; }
+    .legend { font-size: 12px; line-height: 1.7; margin-top: 16px; color: #8a909c; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Message Transformation</h1>
+    <label>from <select id="origin"></select></label>
+    <input id="text" placeholder="message to send…" value="Hello Mesh" />
+    <button class="primary" id="send">Send</button>
+    <button id="reset">Reset</button>
+    <span class="meta">
+        <span id="server">unknown server</span>
+        ·
+        <span id="status">connecting…</span>
+    </span>  
+</header>
+  <div id="main">
+    <div id="graph"></div>
+    <div id="panel"><h2>Trace</h2><div id="panel-body">Send a message to see how each node transforms it.</div></div>
+  </div>
+
+  <script>
+    const STATUS_COLORS = {
+      waiting:  { bg: "#30363d", border: "#6e7681" },
+      received: { bg: "#5a4710", border: "#d29922" },
+      sent:     { bg: "#1f6f33", border: "#3fb950" },
+      chose:    { bg: "#1f4f6f", border: "#58a6ff" },
+      down:     { bg: "#5c1f1f", border: "#f85149" },
+    };
+
+    const nodes = new vis.DataSet();
+    const edges = new vis.DataSet();
+    new vis.Network(document.getElementById("graph"), { nodes, edges }, {
+      layout: {
+        hierarchical: {
+          enabled: true,
+          direction: "LR",        // left-to-right: origin on the left, node4 on the right
+          sortMethod: "directed", // follow edge direction to assign levels
+          levelSeparation: 220,
+          nodeSpacing: 130,
+        },
+      },
+      nodes: { shape: "dot", size: 26, font: { color: "#e6e6e6", size: 14, multi: true }, borderWidth: 3 },
+      edges: {
+        arrows: { to: { enabled: true, scaleFactor: 0.7 } },
+        smooth: { type: "cubicBezier", forceDirection: "horizontal", roundness: 0.4 },
+        color: { color: "#484f58" },
+      },
+      physics: false,            // hierarchical layout positions nodes; no force simulation
+    });
+
+    let originInitialized = false;
+
+    function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+    function renderTrail(trail, chosenNode) {
+      return trail.map(s =>
+        `<div class="step"><span class="n">${esc(s.node)}</span>: <code>${esc(s.in)}</code> <span class="arrow">→</span> <code>${esc(s.out)}</code></div>`
+      ).join("");
+    }
+
+    function renderPanel(collector) {
+      const body = document.getElementById("panel-body");
+      if (!collector || !collector.decision) {
+        body.innerHTML = "Send a message to see how each node transforms it.";
+        return;
+      }
+      const { chosen, candidates } = collector.decision;
+      let html = `<div style="margin-bottom:12px">original: <code>${esc(chosen.original ?? "")}</code></div>`;
+      for (const c of candidates) {
+        const branchEnd = c.trail[c.trail.length - 1]?.node;
+        const win = c.text === chosen.text && branchEnd === chosen.trail[chosen.trail.length - 1]?.node;
+        html += `<div class="branch ${win ? "win" : ""}">
+          <div class="tag">branch ending at ${esc(branchEnd)} ${win ? "✓ accepted" : ""}</div>
+          ${renderTrail(c.trail)}
+          <div style="margin-top:6px">result: <code>${esc(c.text)}</code></div>
+        </div>`;
+      }
+      html += `<div style="margin-top:8px">${esc(collector.id)} accepted: <code>${esc(chosen.text)}</code></div>`;
+      body.innerHTML = html;
+    }
+
+    async function refresh() {
+      let data;
+      try { data = await (await fetch("/api/graph")).json(); }
+      catch (e) { document.getElementById("status").textContent = "backend unreachable"; return; }
+
+      if (!originInitialized && data.nodes.length) {
+        document.getElementById("origin").innerHTML =
+          data.nodes.map(n => `<option>${n.id}</option>`).join("");
+        originInitialized = true;
+      }
+
+      const counts = {};
+      const nodeIds = new Set();
+      let collector = null;
+      for (const n of data.nodes) {
+        nodeIds.add(n.id);
+        counts[n.status] = (counts[n.status] || 0) + 1;
+        if (n.role === "collector") collector = n;
+        const c = STATUS_COLORS[n.status] || STATUS_COLORS.waiting;
+        const txt = n.last_message ? `\n"${n.last_message.text}"` : "";
+        nodes.update({
+          id: n.id,
+          label: `${n.id}\n[${n.status}]${txt}`,
+          color: { background: c.bg, border: c.border },
+        });
+      }
+      nodes.getIds().forEach(id => { if (!nodeIds.has(id)) nodes.remove(id); });
+
+      const edgeIds = new Set();
+      for (const e of data.edges) {
+        const id = `${e.from}->${e.to}`;
+        edgeIds.add(id);
+        edges.update({ id, from: e.from, to: e.to });
+      }
+      edges.getIds().forEach(id => { if (!edgeIds.has(id)) edges.remove(id); });
+
+      document.getElementById("status").textContent =
+        Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(" · ");
+      renderPanel(collector);
+    }
+
+    async function refreshServer() {
+      try {
+          const data = await (await fetch("/api/server")).json();
+          document.getElementById("server").textContent =
+              `Served by ${data.server}`;
+      }
+      catch {
+          document.getElementById("server").textContent =
+              "server unknown";
+      }
+    }
+
+    document.getElementById("send").onclick = () =>
+      fetch("/api/send", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: document.getElementById("origin").value,
+          text: document.getElementById("text").value,
+        }),
+      });
+
+    document.getElementById("reset").onclick = () =>
+      fetch("/api/reset", { method: "POST" });
+
+    refreshServer();
+    refresh();
+    setInterval(refresh, 500);
+  </script>
+</body>
+</html>
