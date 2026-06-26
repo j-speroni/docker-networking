@@ -23,3 +23,5 @@ if ($LASTEXITCODE -ne 0) { Write-Host "failed, aborting." -ForegroundColor Red; 
 Write-Host "Shutting down DinD containers..." -ForegroundColor Cyan
 docker compose down
 if ($LASTEXITCODE -ne 0) { Write-Host "failed, aborting." -ForegroundColor Red; exit 1 }
+
+Write-Host "Done! Shutdown finished." -ForegroundColor Green
